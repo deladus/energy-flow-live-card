@@ -13,13 +13,16 @@ Animierte Energiefluss-Karte für [Home Assistant](https://www.home-assistant.io
 - **Linien mit Farbverlauf** von der Farbe des Startknotens zur Farbe des Zielknotens. Die ersten und letzten Prozent der Linie bleiben einfarbig (einstellbar).
 - **Direkte Flüsse aus deinen Sensoren**, z. B. „Solar zum Speicher“. Die Karte rechnet nichts aus Schwellwerten zusammen.
 - **Ladestand im Knoten** (Zahl plus Ring bzw. Rahmen). Der Richtungstext („lädt“, „Bezug“ …) lässt sich ein- und ausschalten.
+- **Quellen-Aufteilung:** Ein Knoten kann zeigen, woher seine Leistung kommt, z. B. Solar- und Netzanteil an der Wallbox (`show_sources`).
 - **Eigenes Hintergrundbild**, optional mit automatischem Wechsel nach Tageszeit und Wetter (klar, bewölkt, Regen, starker Regen – jeweils Tag und Nacht) und weichem Überblenden.
 - **Visueller Editor** im Karten-Dialog. YAML ist nicht nötig.
 - Beliebig viele eigene Knoten (Wärmepumpe, Pool, zweite Wallbox …).
 
 |  |  |
 | --- | --- |
-| ![Rechteckige Knoten mit ladender Wallbox](docs/rechteck-wallbox.png) | ![Schmale Ansicht auf dem Handy](docs/mobil.png) |
+| ![Rechteckige Knoten mit ladender Wallbox](docs/rechteck-wallbox.png)
+
+![Quellen-Aufteilung im Knoten der Wallbox](docs/quellen.png) | ![Schmale Ansicht auf dem Handy](docs/mobil.png) |
 
 ## Installation
 
@@ -99,6 +102,8 @@ Die Knoten `solar`, `home`, `battery`, `grid` und `ev` bringen Symbol, Name, Far
 | `node_shape` | `circle` | `circle` (Kreis) oder `rounded` (Rechteck mit runden Ecken) |
 | `node_opacity` | `0.9` | Deckkraft der Knoten (0,3 bis 1) |
 | `show_state_text` | `false` | Richtungstext unter dem Namen („lädt“, „entlädt“, „Bezug“, „Einspeisung“) |
+| `show_sources` | `false` | Quellen-Aufteilung unter jedem Knoten mit eingehenden Flüssen (siehe unten). Auch pro Knoten einstellbar |
+| `sources_mode` | `always` | `always` zeigt alle Quellen, `active` nur, wenn mindestens zwei Quellen Leistung liefern (siehe unten). Auch pro Knoten einstellbar |
 | `animation` | `true` | Wandernde Punkte an/aus. Bei „Bewegung reduzieren“ im Betriebssystem bleiben sie aus |
 | `line_gradient` | `true` | Farbverlauf auf den Linien. `false` = einfarbig in der Farbe des Startknotens |
 | `gradient_hold` | `15` | Einfarbiger Anteil an jedem Ende der Linie in % (0 bis 45) |
@@ -119,6 +124,8 @@ Die Knoten `solar`, `home`, `battery`, `grid` und `ev` bringen Symbol, Name, Far
 | `label_positive`, `label_negative` | Richtungstexte bei positivem/negativem Wert (nur sichtbar bei `show_state_text`) |
 | `label_idle` | Text im Ruhezustand |
 | `show_state_text` | `true`/`false` überschreibt die globale Einstellung für diesen Knoten |
+| `show_sources` | `true`/`false` überschreibt die globale Einstellung für diesen Knoten |
+| `sources_mode` | `always` oder `active`. Überschreibt die globale Einstellung für diesen Knoten |
 
 ### Flüsse (`flows:`)
 
@@ -127,6 +134,31 @@ Die Knoten `solar`, `home`, `battery`, `grid` und `ev` bringen Symbol, Name, Far
 | `from`, `to` | Namen zweier Knoten |
 | `entity` | Sensor mit der Leistung in Flussrichtung. Flüsse ohne Sensor werden ignoriert |
 | `invert` | Vorzeichen umkehren |
+
+## Quellen-Aufteilung
+
+Mit `show_sources` zeigt ein Knoten in seinem Inneren kleine Zeilen, wie viel Leistung jede Quelle liefert: das Symbol der Quelle in ihrer Farbe plus den Wert. Die Zeilen entstehen aus den Flüssen, die in diesem Knoten enden. Jede Quelle braucht also einen Fluss (`from` → `to`) mit Sensor. Quellen, die gerade nichts liefern, werden abgedunkelt.
+
+```yaml
+nodes:
+  ev:
+    entity: sensor.wallbox_leistung
+    show_sources: true     # zeigt z. B. ☀ 3,70 kW   ⚡ 900 W
+flows:
+  - { from: solar, to: ev, entity: sensor.solar_zu_wallbox }
+  - { from: grid,  to: ev, entity: sensor.netz_zu_wallbox }
+```
+
+**Wann wird es angezeigt (`sources_mode`)?** Mit `always` (Standard) stehen alle Quellen da, ruhende sind abgedunkelt. Mit `active` erscheint die Aufteilung nur, wenn mindestens zwei Quellen gerade mehr als `min_power` liefern, und dann nur diese. Bei einer einzelnen Quelle würde sie nur die Gesamtleistung des Knotens wiederholen und bleibt deshalb ausgeblendet.
+
+```yaml
+nodes:
+  ev:
+    show_sources: true
+    sources_mode: active
+```
+
+Beim Darüberfahren erscheint der Name der Quelle. Zwei Quellen passen gut in einen Knoten in Standardgröße. Bei drei oder mehr Quellen (oder kleinen Karten) vergrößere die `size` des Knotens und schalte die Funktion lieber pro Knoten als global ein.
 
 ## Knoten verschieben (Layout-Modus)
 

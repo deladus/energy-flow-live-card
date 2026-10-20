@@ -1,5 +1,5 @@
 /*
- * energy-flow-live-card  v1.0.0
+ * energy-flow-live-card  v1.1.0
  * Animierte Energiefluss-Karte für Home Assistant (Solar, Haus, Speicher, Netz, Wallbox ...).
  * Sprache: Deutsch und Englisch, automatisch nach der Home-Assistant-Sprache (alle anderen -> Englisch).
  * Eigene Implementierung, inspiriert von Steve-gnome/energy-flow-card.
@@ -7,6 +7,7 @@
  * - Flüsse werden direkt über Sensoren definiert (z. B. "Solar zum Speicher").
  * - Knoten frei positionierbar: per left/top (in %) oder interaktiv im Layout-Modus (edit_layout: true).
  * - Eigenes Hintergrundbild (background), optional mit automatischem Seitenverhältnis (aspect_ratio: image).
+ * - Quellen-Aufteilung (show_sources): zeigt im Knoten, aus welchen Quellen die Leistung kommt (z. B. Solar und Netz zur Wallbox).
  * - Ladestand (pct) steht im Knoten; Richtungstext ("lädt", "Bezug" ...) per show_state_text ein-/ausschaltbar.
  * - Knotenform: Kreis oder Rechteck mit runden Ecken (node_shape, je Knoten: shape); Schrift skaliert mit der Knotengröße.
  * - Bildwechsel nach Tageszeit (sun.sun) und Wetter (weather_entity): klar, bewölkt, Regen, starker Regen.
@@ -50,6 +51,8 @@ const I18N = {
     o_day: "Tag, klar", o_day_cloudy: "Tag, bewölkt", o_day_rain: "Tag, Regen", o_day_heavy_rain: "Tag, starker Regen",
     o_night: "Nacht, klar", o_night_cloudy: "Nacht, bewölkt", o_night_rain: "Nacht, Regen", o_night_heavy_rain: "Nacht, starker Regen",
     l_title: "Titel", l_aspect_ratio: "Seitenverhältnis", l_node_size: "Knotengröße", l_node_shape: "Knotenform", l_shape: "Form",
+    l_show_sources: "Quellen-Aufteilung anzeigen", l_sources_mode: "Quellen-Aufteilung: wann",
+    o_src_always: "Immer", o_src_active: "Nur bei mehreren aktiven Quellen",
     l_show_state_text: "Richtungstext anzeigen (lädt, Bezug …)", l_node_opacity: "Deckkraft der Knoten",
     l_min_power: "Mindestleistung für Anzeige", l_animation: "Animation",
     l_line_gradient: "Farbverlauf auf den Linien", l_gradient_hold: "Einfarbiger Anteil an jedem Ende",
@@ -76,6 +79,8 @@ const I18N = {
     h_entity: "Entweder ein einzelner Sensor …",
     h_plus: "… oder Summe der Plus-Sensoren minus Summe der Minus-Sensoren (z. B. Laden minus Entladen).",
     h_pct: "Zeigt den Ladestand als Zahl im Knoten und als Ring (Kreis) bzw. Rahmen (Rechteck).",
+    h_sources_mode: "„Nur bei mehreren aktiven Quellen“ blendet die Aufteilung nur ein, wenn mindestens zwei Quellen gerade Leistung liefern, und zeigt dann nur diese.",
+    h_show_sources: "Zeigt im Knoten, aus welchen Quellen die Leistung kommt (z. B. Solar und Netz zur Wallbox). Dafür braucht jede Quelle einen Fluss in diesen Knoten.",
     h_show_state_text: "Die Animation zeigt die Richtung bereits. Einschalten blendet Texte wie „lädt“, „entlädt“, „Bezug“ oder „Einspeisung“ unter dem Namen ein.",
     h_status_entity: "Wird unter dem Namen angezeigt, wenn kein anderer Text greift.",
     h_invert: "Nur nötig, wenn der Sensor negative Werte für diese Richtung liefert.",
@@ -105,6 +110,8 @@ const I18N = {
     o_day: "Day, clear", o_day_cloudy: "Day, cloudy", o_day_rain: "Day, rain", o_day_heavy_rain: "Day, heavy rain",
     o_night: "Night, clear", o_night_cloudy: "Night, cloudy", o_night_rain: "Night, rain", o_night_heavy_rain: "Night, heavy rain",
     l_title: "Title", l_aspect_ratio: "Aspect ratio", l_node_size: "Node size", l_node_shape: "Node shape", l_shape: "Shape",
+    l_show_sources: "Show source breakdown", l_sources_mode: "Source breakdown: when",
+    o_src_always: "Always", o_src_active: "Only when several sources are active",
     l_show_state_text: "Show direction text (charging, import …)", l_node_opacity: "Node opacity",
     l_min_power: "Minimum power to show as active", l_animation: "Animation",
     l_line_gradient: "Color gradient on lines", l_gradient_hold: "Solid share at each end",
@@ -131,6 +138,8 @@ const I18N = {
     h_entity: "Either a single sensor …",
     h_plus: "… or the sum of the plus sensors minus the sum of the minus sensors (e.g. charging minus discharging).",
     h_pct: "Shows the state of charge as a number in the node and as a ring (circle) or frame (rectangle).",
+    h_sources_mode: "\"Only when several sources are active\" shows the breakdown only if at least two sources currently deliver power, and then only those.",
+    h_show_sources: "Shows inside the node where its power comes from (e.g. solar and grid into the EV charger). Each source needs a flow into this node.",
     h_show_state_text: "The animation already shows the direction. Switching this on adds texts like \"charging\", \"discharging\", \"import\" or \"export\" under the name.",
     h_status_entity: "Shown under the name when no other text applies.",
     h_invert: "Only needed if the sensor reports negative values for this direction.",
@@ -217,6 +226,8 @@ class EnergyFlowLiveCard extends HTMLElement {
       node_size: 18,
       node_shape: "circle",
       show_state_text: false,
+      show_sources: false,
+      sources_mode: "always",
       animation: true,
       background_dim: 0.6,
       background_fit: "cover",
@@ -339,6 +350,12 @@ class EnergyFlowLiveCard extends HTMLElement {
         ([k, n]) => {
           const sz = Number(n.size || c.node_size) || 18; // Breite in % der Karte; Schrift und Symbole richten sich danach
           const rounded = (n.shape || c.node_shape) === "rounded";
+          // Quellen-Aufteilung: alle Flüsse, die in diesen Knoten münden, als kleine Zeilen im Knoten (Symbol der Quelle + Leistung)
+          const showSrc = (typeof n.show_sources === "boolean" ? n.show_sources : c.show_sources) === true;
+          const incoming = showSrc ? c.flows.map((f, i) => ({ f, i })).filter((x) => x.f.to === k) : [];
+          const srcHtml = incoming.length
+            ? `<span class="src" data-mode="${(n.sources_mode || c.sources_mode) === "active" ? "active" : "always"}">${incoming.map(({ f, i }) => `<span class="chip" data-i="${i}" style="--c:${esc(nodes[f.from].color)}" title="${esc(nodes[f.from].name)}"><ha-icon icon="${esc(nodes[f.from].icon)}"></ha-icon><b>–</b></span>`).join("")}</span>`
+            : "";
           return `
       <div class="node${rounded ? " rounded" : ""}${edit ? " edit" : ""}" data-k="${esc(k)}"
            style="left:${n.left}%;top:${n.top}%;width:${sz}%;--s:${sz};--c:${esc(n.color)}">
@@ -346,6 +363,7 @@ class EnergyFlowLiveCard extends HTMLElement {
         <div class="ring"><div class="core">
           <div class="top"><ha-icon icon="${esc(n.icon)}"></ha-icon><span class="pct"></span></div>
           <span class="val">–</span>
+          ${srcHtml}
         </div></div>
         <div class="label"><span class="name">${esc(n.name)}</span><span class="sub"></span></div>
       </div>`;
@@ -424,6 +442,12 @@ class EnergyFlowLiveCard extends HTMLElement {
                  text-shadow: 0 1px 3px rgba(0,0,0,.7); pointer-events: none; }
         .name { font-size: max(9px, calc(var(--s) * .611px), calc(var(--s) * .1056cqw)); opacity: .95; }
         .sub { font-size: max(9px, calc(var(--s) * .556px), calc(var(--s) * .0889cqw)); opacity: .75; min-height: 1.2em; }
+        .src { display: flex; flex-direction: column; align-items: center; gap: .15em; margin-top: .3em; white-space: nowrap;
+               font-size: max(8px, calc(var(--s) * .5px), calc(var(--s) * .0722cqw)); line-height: 1.1; }
+        .chip { display: inline-flex; align-items: center; gap: .25em; opacity: .4; transition: opacity .4s; }
+        .chip.on { opacity: 1; }
+        .chip ha-icon { --mdc-icon-size: 1.25em; width: 1.25em; height: 1.25em; color: var(--c); }
+        .chip b { font-weight: 600; font-variant-numeric: tabular-nums; }
         .editbar { padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 8px; color: var(--primary-text-color); }
         .editbar .hint { font-size: 13px; color: var(--secondary-text-color); }
         .editbar textarea { width: 100%; box-sizing: border-box; font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace;
@@ -705,6 +729,10 @@ class EnergyFlowLiveCard extends HTMLElement {
       let p = this._val(f.entity);
       if (p !== null && f.invert) p = -p;
       const active = p !== null && p > min;
+      this.shadowRoot.querySelectorAll(`.chip[data-i="${i}"]`).forEach((chip) => {
+        chip.classList.toggle("on", active);
+        chip.querySelector("b").textContent = p === null ? "–" : this._fmt(Math.max(0, p));
+      });
       const beam = this.shadowRoot.querySelector(`.beam[data-i="${i}"]`);
       if (beam) {
         beam.classList.toggle("on", active);
@@ -724,6 +752,14 @@ class EnergyFlowLiveCard extends HTMLElement {
           });
         }
       });
+    });
+
+    // Modus "active": nur anzeigen, wenn mehr als eine Quelle gerade liefert, und dann nur die liefernden Quellen.
+    this.shadowRoot.querySelectorAll('.src[data-mode="active"]').forEach((src) => {
+      const chips = [...src.querySelectorAll(".chip")];
+      const n = chips.filter((ch) => ch.classList.contains("on")).length;
+      chips.forEach((ch) => { ch.style.display = n >= 2 && ch.classList.contains("on") ? "" : "none"; });
+      src.style.display = n >= 2 ? "" : "none";
     });
 
     this._wrap.setAttribute("aria-label", `${tr(this._hass, "aria_prefix")}: ${summary.join(", ")}`);
@@ -746,7 +782,7 @@ window.customCards.push({
  * ===================================================================== */
 
 const DEFAULT_CFG = {
-  aspect_ratio: 1.6, min_power: 20, node_opacity: 0.9, node_size: 18, node_shape: "circle", show_state_text: false,
+  aspect_ratio: 1.6, min_power: 20, node_opacity: 0.9, node_size: 18, node_shape: "circle", show_state_text: false, show_sources: false, sources_mode: "always",
   animation: true, background_dim: 0.6, background_fit: "cover", edit_layout: false,
   line_gradient: true, gradient_hold: 15, background_preview: "auto",
 };
@@ -762,6 +798,9 @@ const SCHEMA_VIEW = (t) => [
   { name: "node_shape", selector: { select: { mode: "dropdown", options: [
     { value: "circle", label: t("o_shape_circle") }, { value: "rounded", label: t("o_shape_rounded") } ] } } },
   { name: "show_state_text", selector: { boolean: {} } },
+  { name: "show_sources", selector: { boolean: {} } },
+  { name: "sources_mode", selector: { select: { mode: "dropdown", options: [
+    { value: "always", label: t("o_src_always") }, { value: "active", label: t("o_src_active") } ] } } },
   { name: "node_opacity", selector: { number: { min: 0.3, max: 1, step: 0.05, mode: "slider" } } },
   { name: "min_power", selector: { number: { min: 0, max: 500, step: 5, mode: "box", unit_of_measurement: "W" } } },
   { name: "animation", selector: { boolean: {} } },
@@ -800,6 +839,10 @@ const SCHEMA_NODE = (t) => [
     { value: "rounded", label: t("o_shape_rounded") } ] } } },
   { name: "show_state_text", selector: { select: { mode: "dropdown", options: [
     { value: "default", label: t("o_default") }, { value: "on", label: t("o_show") }, { value: "off", label: t("o_hide") } ] } } },
+  { name: "show_sources", selector: { select: { mode: "dropdown", options: [
+    { value: "default", label: t("o_default") }, { value: "on", label: t("o_show") }, { value: "off", label: t("o_hide") } ] } } },
+  { name: "sources_mode", selector: { select: { mode: "dropdown", options: [
+    { value: "default", label: t("o_default") }, { value: "always", label: t("o_src_always") }, { value: "active", label: t("o_src_active") } ] } } },
   { name: "entity", selector: { entity: { domain: "sensor" } } },
   { name: "plus", selector: { entity: { domain: "sensor", multiple: true } } },
   { name: "minus", selector: { entity: { domain: "sensor", multiple: true } } },
@@ -873,6 +916,8 @@ class EnergyFlowLiveCardEditor extends HTMLElement {
     return {
       name: m.name, icon: m.icon, color: hexToRgb(m.color), left: m.left, top: m.top, size: m.size, shape: m.shape || "default",
       show_state_text: m.show_state_text === true ? "on" : m.show_state_text === false ? "off" : "default",
+      show_sources: m.show_sources === true ? "on" : m.show_sources === false ? "off" : "default",
+      sources_mode: m.sources_mode || "default",
       entity: m.entity, plus: m.plus || [], minus: m.minus || [], pct: m.pct, status_entity: m.status_entity,
       label_positive: m.label_positive, label_negative: m.label_negative, label_idle: m.label_idle,
     };
@@ -936,8 +981,8 @@ class EnergyFlowLiveCardEditor extends HTMLElement {
         val = Array.isArray(val) ? rgbToHex(val) : val;
       }
       if (name === "left" || name === "top") val = typeof val === "number" ? Math.round(val * 10) / 10 : val;
-      if (name === "shape" && val === "default") val = undefined;
-      if (name === "show_state_text") val = val === "on" ? true : val === "off" ? false : undefined;
+      if ((name === "shape" || name === "sources_mode") && val === "default") val = undefined;
+      if (name === "show_state_text" || name === "show_sources") val = val === "on" ? true : val === "off" ? false : undefined;
       if (isEmpty(val) || val === def[name]) delete n[name];
       else n[name] = val;
     }

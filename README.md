@@ -13,13 +13,16 @@ An animated energy-flow card for [Home Assistant](https://www.home-assistant.io/
 - **Gradient lines** from the start node's color to the target node's color. The first and last part of each line stays solid (adjustable).
 - **Flows come straight from your sensors**, e.g. "solar to battery". The card does not derive anything from thresholds.
 - **State of charge inside the node** (number plus ring/frame). The direction text ("charging", "import" …) can be switched on or off.
+- **Source breakdown:** a node can show where its power comes from, e.g. solar and grid share of the EV charger (`show_sources`).
 - **Your own background image**, optionally switching automatically by time of day and weather (clear, cloudy, rain, heavy rain – each day and night) with a smooth cross-fade.
 - **Visual editor** in the card dialog. No YAML required.
 - Any number of custom nodes (heat pump, pool, second charger …).
 
 |  |  |
 | --- | --- |
-| ![Rounded nodes with a charging EV](docs/rechteck-wallbox.png) | ![Narrow mobile view](docs/mobil.png) |
+| ![Rounded nodes with a charging EV](docs/rechteck-wallbox.png)
+
+![Source breakdown inside the EV charger node](docs/quellen.png) | ![Narrow mobile view](docs/mobil.png) |
 
 ## Installation
 
@@ -108,6 +111,8 @@ Numbers are formatted according to the Home Assistant language. Translations liv
 | `node_shape` | `circle` | `circle` or `rounded` (rounded rectangle) |
 | `node_opacity` | `0.9` | Node opacity (0.3 to 1) |
 | `show_state_text` | `false` | Direction text under the name ("charging", "import" …) |
+| `show_sources` | `false` | Show the source breakdown under every node that has incoming flows (see below). Can be set per node |
+| `sources_mode` | `always` | `always` shows all sources, `active` only when at least two sources deliver power (see below). Can be set per node |
 | `animation` | `true` | Moving dots on/off. Stays off if the OS requests reduced motion |
 | `line_gradient` | `true` | Gradient on the lines. `false` = solid color of the start node |
 | `gradient_hold` | `15` | Solid share at each end of a line in % (0 to 45) |
@@ -128,6 +133,8 @@ Numbers are formatted according to the Home Assistant language. Translations liv
 | `label_positive`, `label_negative` | Direction texts for positive/negative value (only visible with `show_state_text`) |
 | `label_idle` | Text when idle |
 | `show_state_text` | `true`/`false` overrides the global setting for this node |
+| `show_sources` | `true`/`false` overrides the global setting for this node |
+| `sources_mode` | `always` or `active`. Overrides the global setting for this node |
 
 ### Flows (`flows:`)
 
@@ -136,6 +143,31 @@ Numbers are formatted according to the Home Assistant language. Translations liv
 | `from`, `to` | Names of two nodes |
 | `entity` | Sensor with the power in flow direction. Flows without a sensor are ignored |
 | `invert` | Flip the sign |
+
+## Source breakdown
+
+With `show_sources` a node shows, as small lines inside the node, how much power each source delivers: the source's icon in its color plus the value. The lines are built from the flows that end in this node, so every source needs a flow (`from` → `to`) with a sensor. Sources that currently deliver nothing are dimmed.
+
+```yaml
+nodes:
+  ev:
+    entity: sensor.wallbox_power
+    show_sources: true     # shows e.g. ☀ 3.70 kW   ⚡ 900 W
+flows:
+  - { from: solar, to: ev, entity: sensor.solar_to_wallbox }
+  - { from: grid,  to: ev, entity: sensor.grid_to_wallbox }
+```
+
+**When to show it (`sources_mode`):** with `always` (default) all sources are listed and idle ones are dimmed. With `active` the breakdown only appears when at least two sources currently deliver more than `min_power`, and then lists only those. With a single source the breakdown would only repeat the node's total, so it stays hidden.
+
+```yaml
+nodes:
+  ev:
+    show_sources: true
+    sources_mode: active
+```
+
+Hovering a line shows the name of the source. Two sources fit well into a default-sized node. For three or more sources (or small cards) increase the node's `size`, and prefer switching it on per node instead of globally.
 
 ## Moving nodes (layout mode)
 
