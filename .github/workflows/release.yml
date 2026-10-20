@@ -1,0 +1,26 @@
+name: Release
+
+# Wird ausgelöst, wenn ein Tag wie v1.0.0 gepusht wird.
+# Legt ein vollständiges GitHub-Release an und hängt die Karte als Datei an.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prüfen, ob die Version in der Datei zum Tag passt
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          grep -q "energy-flow-live-card  v${VERSION}" energy-flow-live-card.js || {
+            echo "Die Kopfzeile in energy-flow-live-card.js nennt nicht die Version ${VERSION}."; exit 1; }
+      - name: Release erstellen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" energy-flow-live-card.js --title "$GITHUB_REF_NAME" --generate-notes
