@@ -14,6 +14,7 @@ An animated energy-flow card for [Home Assistant](https://www.home-assistant.io/
 - **Flows come straight from your sensors**, e.g. "solar to battery". The card does not derive anything from thresholds.
 - **State of charge inside the node** (number plus ring/frame). The direction text ("charging", "import" …) can be switched on or off.
 - **Source breakdown:** a node can show where its power comes from, e.g. solar and grid share of the EV charger (`show_sources`).
+- **Navigation:** tap a node to open another dashboard or page, plus an optional footnote link (e.g. to the Energy dashboard).
 - **Your own background image**, optionally switching automatically by time of day and weather (clear, cloudy, rain, heavy rain – each day and night) with a smooth cross-fade.
 - **Visual editor** in the card dialog. No YAML required.
 - Any number of custom nodes (heat pump, pool, second charger …).
@@ -113,6 +114,9 @@ Numbers are formatted according to the Home Assistant language. Translations liv
 | `show_state_text` | `false` | Direction text under the name ("charging", "import" …) |
 | `show_sources` | `false` | Show the source breakdown under every node that has incoming flows (see below). Can be set per node |
 | `sources_mode` | `always` | `always` shows all sources, `active` only when at least two sources deliver power (see below). Can be set per node |
+| `footer_path` | – | Footnote link at the bottom right: dashboard path (`/energy`) or full URL (see Navigation) |
+| `footer_label` | *Energy dashboard* | Text of the footnote link |
+| `footer_icon` | `mdi:arrow-right-circle-outline` | Icon of the footnote link |
 | `animation` | `true` | Moving dots on/off. Stays off if the OS requests reduced motion |
 | `line_gradient` | `true` | Gradient on the lines. `false` = solid color of the start node |
 | `gradient_hold` | `15` | Solid share at each end of a line in % (0 to 45) |
@@ -135,6 +139,7 @@ Numbers are formatted according to the Home Assistant language. Translations liv
 | `show_state_text` | `true`/`false` overrides the global setting for this node |
 | `show_sources` | `true`/`false` overrides the global setting for this node |
 | `sources_mode` | `always` or `active`. Overrides the global setting for this node |
+| `navigate_path` | Tapping the node opens this dashboard path (`/energy`, `/lovelace/solar`) or URL (new tab) |
 
 ### Flows (`flows:`)
 
@@ -168,6 +173,24 @@ nodes:
 ```
 
 Hovering a line shows the name of the source. Two sources fit well into a default-sized node. For three or more sources (or small cards) increase the node's `size`, and prefer switching it on per node instead of globally.
+
+## Navigation
+
+Any node can lead to another dashboard or page, and an optional footnote link sits at the bottom right of the card:
+
+```yaml
+footer_path: /energy              # footnote link
+footer_label: Energy dashboard    # optional, default depends on the language
+nodes:
+  home:
+    navigate_path: /energy        # tap the house node
+  solar:
+    navigate_path: /lovelace/solar
+  ev:
+    navigate_path: https://example.org   # full URL opens in a new tab
+```
+
+Paths are the ones you see in the browser address bar after the host name. Nodes with a target show a pointer cursor and can be operated by keyboard. In layout mode, links are disabled so nodes can be dragged.
 
 ## Moving nodes (layout mode)
 

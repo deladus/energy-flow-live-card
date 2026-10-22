@@ -1,5 +1,5 @@
 /*
- * energy-flow-live-card  v1.1.0
+ * energy-flow-live-card  v1.2.0
  * Animierte Energiefluss-Karte für Home Assistant (Solar, Haus, Speicher, Netz, Wallbox ...).
  * Sprache: Deutsch und Englisch, automatisch nach der Home-Assistant-Sprache (alle anderen -> Englisch).
  * Eigene Implementierung, inspiriert von Steve-gnome/energy-flow-card.
@@ -8,6 +8,7 @@
  * - Knoten frei positionierbar: per left/top (in %) oder interaktiv im Layout-Modus (edit_layout: true).
  * - Eigenes Hintergrundbild (background), optional mit automatischem Seitenverhältnis (aspect_ratio: image).
  * - Quellen-Aufteilung (show_sources): zeigt im Knoten, aus welchen Quellen die Leistung kommt (z. B. Solar und Netz zur Wallbox).
+ * - Navigation: Knoten mit navigate_path öffnen beim Antippen ein Dashboard/eine Seite; footer_path zeigt einen Link als Fußnote.
  * - Ladestand (pct) steht im Knoten; Richtungstext ("lädt", "Bezug" ...) per show_state_text ein-/ausschaltbar.
  * - Knotenform: Kreis oder Rechteck mit runden Ecken (node_shape, je Knoten: shape); Schrift skaliert mit der Knotengröße.
  * - Bildwechsel nach Tageszeit (sun.sun) und Wetter (weather_entity): klar, bewölkt, Regen, starker Regen.
@@ -29,7 +30,7 @@ const I18N = {
   de: {
     node_solar: "Solar", node_home: "Haus", node_battery: "Speicher", node_grid: "Netz", node_ev: "Wallbox",
     lbl_charging: "lädt", lbl_discharging: "entlädt", lbl_import: "Bezug", lbl_export: "Einspeisung",
-    unavailable: "nicht verfügbar", aria_prefix: "Energiefluss",
+    unavailable: "nicht verfügbar", aria_prefix: "Energiefluss", footer_default: "Energie-Dashboard",
     layout_hint: "Layout-Modus: Knoten per Maus oder Finger verschieben. Danach die Werte kopieren, in die Konfiguration unter <code>nodes:</code> übernehmen und <code>edit_layout</code> wieder entfernen.",
     aria_positions: "Positionen als YAML", copy_yaml: "YAML kopieren",
     copy_selected: "Markiert – bitte Strg+C drücken", copied: "Kopiert ✓",
@@ -38,6 +39,9 @@ const I18N = {
     no_form: "Der visuelle Editor ist in dieser Home-Assistant-Version nicht verfügbar. Bitte den YAML-Editor nutzen.",
     s_view: "Darstellung", s_bg: "Hintergrundbild", s_weather: "Wetter und Tageszeit",
     s_weather_hint: "Optional: weitere Bilder für Wetter und Nacht. Fehlt ein Bild, nimmt die Karte ersatzweise „klar“ (nachts erst „Nacht, klar“, dann „Tag, klar“). Alle Bilder sollten dasselbe Seitenverhältnis haben.",
+    s_links: "Links", s_links_hint: "Optionaler Link als Fußnote unten rechts. Einzelne Knoten bekommen ihr Ziel im Knoten selbst (Feld „Ziel beim Antippen“).",
+    l_footer_path: "Fußnoten-Link: Ziel", l_footer_label: "Fußnoten-Link: Text", l_navigate_path: "Ziel beim Antippen",
+    h_footer_path: "Dashboard-Pfad wie /energy oder /lovelace/solar, oder eine vollständige URL. Leer = keine Fußnote.", h_navigate_path: "Pfad wie /energy oder /lovelace/solar, oder eine vollständige URL (öffnet neuen Tab). Leer = Knoten ist nicht anklickbar.",
     s_layout: "Layout", s_layout_hint: "Mit eingeschaltetem Layout-Modus kannst du die Knoten direkt in der Vorschau mit Maus oder Finger verschieben. Die Positionen werden hier automatisch übernommen.",
     s_nodes: "Knoten", s_nodes_hint: "Ein Knoten ist ein Kreis in der Karte, z. B. Solar, Haus oder Wallbox.",
     s_flows: "Flüsse", s_flows_hint: "Ein Fluss ist eine animierte Linie zwischen zwei Knoten. Der Sensor liefert die Leistung in Flussrichtung.",
@@ -88,7 +92,7 @@ const I18N = {
   en: {
     node_solar: "Solar", node_home: "Home", node_battery: "Battery", node_grid: "Grid", node_ev: "EV charger",
     lbl_charging: "charging", lbl_discharging: "discharging", lbl_import: "import", lbl_export: "export",
-    unavailable: "unavailable", aria_prefix: "Energy flow",
+    unavailable: "unavailable", aria_prefix: "Energy flow", footer_default: "Energy dashboard",
     layout_hint: "Layout mode: drag the nodes with mouse or finger. Then copy the values into the configuration under <code>nodes:</code> and remove <code>edit_layout</code> again.",
     aria_positions: "Positions as YAML", copy_yaml: "Copy YAML",
     copy_selected: "Selected – press Ctrl+C", copied: "Copied ✓",
@@ -97,6 +101,9 @@ const I18N = {
     no_form: "The visual editor is not available in this Home Assistant version. Please use the YAML editor.",
     s_view: "Appearance", s_bg: "Background image", s_weather: "Weather and time of day",
     s_weather_hint: "Optional: more images for weather and night. If an image is missing, the card falls back to \"clear\" (at night first \"night, clear\", then \"day, clear\"). All images should have the same aspect ratio.",
+    s_links: "Links", s_links_hint: "Optional link as a footnote at the bottom right. A node gets its own target in the node itself (field \"Target on tap\").",
+    l_footer_path: "Footnote link: target", l_footer_label: "Footnote link: text", l_navigate_path: "Target on tap",
+    h_footer_path: "Dashboard path like /energy or /lovelace/solar, or a full URL. Empty = no footnote.", h_navigate_path: "Path like /energy or /lovelace/solar, or a full URL (opens a new tab). Empty = node is not clickable.",
     s_layout: "Layout", s_layout_hint: "With layout mode switched on you can drag the nodes directly in the preview with mouse or finger. Positions are picked up here automatically.",
     s_nodes: "Nodes", s_nodes_hint: "A node is a circle on the card, e.g. solar, home or EV charger.",
     s_flows: "Flows", s_flows_hint: "A flow is an animated line between two nodes. The sensor provides the power in flow direction.",
@@ -357,7 +364,7 @@ class EnergyFlowLiveCard extends HTMLElement {
             ? `<span class="src" data-mode="${(n.sources_mode || c.sources_mode) === "active" ? "active" : "always"}">${incoming.map(({ f, i }) => `<span class="chip" data-i="${i}" style="--c:${esc(nodes[f.from].color)}" title="${esc(nodes[f.from].name)}"><ha-icon icon="${esc(nodes[f.from].icon)}"></ha-icon><b>–</b></span>`).join("")}</span>`
             : "";
           return `
-      <div class="node${rounded ? " rounded" : ""}${edit ? " edit" : ""}" data-k="${esc(k)}"
+      <div class="node${rounded ? " rounded" : ""}${edit ? " edit" : ""}${!edit && n.navigate_path ? " link" : ""}" data-k="${esc(k)}"${!edit && n.navigate_path ? ` role="link" tabindex="0" data-nav="${esc(n.navigate_path)}"` : ""}
            style="left:${n.left}%;top:${n.top}%;width:${sz}%;--s:${sz};--c:${esc(n.color)}">
         ${edit ? `<span class="coord">${n.left} / ${n.top}</span>` : ""}
         <div class="ring"><div class="core">
@@ -401,6 +408,12 @@ class EnergyFlowLiveCard extends HTMLElement {
                 --r: calc(var(--s) * .26cqw); --pad: max(2px, calc(var(--s) * .04cqw)); }
         .node.rounded { border-radius: var(--r); }
         .node.edit { cursor: grab; touch-action: none; outline: 2px dashed rgba(255,255,255,.45); outline-offset: 5px; user-select: none; }
+        .node.link { cursor: pointer; }
+        .node.link:focus-visible { outline: 2px solid var(--c); outline-offset: 4px; }
+        .foot { position: absolute; right: 3%; bottom: 2.5%; z-index: 3; display: inline-flex; align-items: center; gap: .3em;
+                font-size: max(11px, 1.7cqw); color: inherit; opacity: .7; text-decoration: none; cursor: pointer; }
+        .foot:hover, .foot:focus-visible { opacity: 1; text-decoration: underline; }
+        .foot ha-icon { --mdc-icon-size: 1.2em; }
         .node.edit.drag { cursor: grabbing; z-index: 6; outline-color: #fff; }
         .node.edit .ring { opacity: 1; }
         .coord { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 9%;
@@ -470,6 +483,7 @@ class EnergyFlowLiveCard extends HTMLElement {
             <defs>${defs}</defs>${rails}${beams}${dots}
           </svg>
           ${nodeHtml}
+          ${!edit && c.footer_path ? `<a class="foot" data-nav="${esc(c.footer_path)}" href="${esc(c.footer_path)}"><ha-icon icon="${esc(c.footer_icon || "mdi:arrow-right-circle-outline")}"></ha-icon>${esc(c.footer_label || tr(this._hass, "footer_default"))}</a>` : ""}
         </div>
         ${editBar}
       </ha-card>`;
@@ -483,6 +497,7 @@ class EnergyFlowLiveCard extends HTMLElement {
     this._bgUrl = null;
 
     if (edit) this._setupEditing();
+    else this._setupNavigation();
     this._built = true;
   }
 
@@ -547,6 +562,28 @@ class EnergyFlowLiveCard extends HTMLElement {
       this._bgIdx ^= 1;
     };
     img.src = url;
+  }
+
+  /* ---------- Navigation ---------- */
+
+  _navigate(path) {
+    if (!path) return;
+    if (/^https?:\/\//i.test(path)) {
+      window.open(path, "_blank", "noopener");
+      return;
+    }
+    history.pushState(null, "", path);
+    window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
+  }
+
+  _setupNavigation() {
+    this.shadowRoot.querySelectorAll("[data-nav]").forEach((el) => {
+      const go = (e) => { e.preventDefault(); this._navigate(el.dataset.nav); };
+      el.addEventListener("click", go);
+      if (el.classList.contains("node")) {
+        el.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") go(e); });
+      }
+    });
   }
 
   /* ---------- Layout-Modus ---------- */
@@ -826,6 +863,10 @@ const SCHEMA_WEATHER = (t) => [
   txt("background_cloudy"), txt("background_rain"), txt("background_heavy_rain"),
   txt("background_night"), txt("background_night_cloudy"), txt("background_night_rain"), txt("background_night_heavy_rain"),
 ];
+const SCHEMA_LINKS = () => [
+  { name: "footer_path", selector: { text: {} } },
+  { name: "footer_label", selector: { text: {} } },
+];
 const SCHEMA_LAYOUT = () => [{ name: "edit_layout", selector: { boolean: {} } }];
 const SCHEMA_NODE = (t) => [
   { name: "name", selector: { text: {} } },
@@ -848,6 +889,7 @@ const SCHEMA_NODE = (t) => [
   { name: "minus", selector: { entity: { domain: "sensor", multiple: true } } },
   { name: "pct", selector: { entity: { domain: "sensor" } } },
   { name: "status_entity", selector: { entity: {} } },
+  { name: "navigate_path", selector: { text: {} } },
 ];
 const SCHEMA_NODE_LABELS = () => [
   { name: "label_positive", selector: { text: {} } },
@@ -918,7 +960,7 @@ class EnergyFlowLiveCardEditor extends HTMLElement {
       show_state_text: m.show_state_text === true ? "on" : m.show_state_text === false ? "off" : "default",
       show_sources: m.show_sources === true ? "on" : m.show_sources === false ? "off" : "default",
       sources_mode: m.sources_mode || "default",
-      entity: m.entity, plus: m.plus || [], minus: m.minus || [], pct: m.pct, status_entity: m.status_entity,
+      entity: m.entity, plus: m.plus || [], minus: m.minus || [], pct: m.pct, status_entity: m.status_entity, navigate_path: m.navigate_path,
       label_positive: m.label_positive, label_negative: m.label_negative, label_idle: m.label_idle,
     };
   }
@@ -1064,6 +1106,7 @@ class EnergyFlowLiveCardEditor extends HTMLElement {
     section(t("s_bg")).appendChild(generalForm(SCHEMA_BG(t)));
     section(t("s_weather"), t("s_weather_hint"))
       .appendChild(generalForm(SCHEMA_WEATHER(t)));
+    section(t("s_links"), t("s_links_hint")).appendChild(generalForm(SCHEMA_LINKS()));
     section(t("s_layout"), t("s_layout_hint"))
       .appendChild(generalForm(SCHEMA_LAYOUT(t)));
 

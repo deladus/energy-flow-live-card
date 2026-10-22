@@ -14,6 +14,7 @@ Animierte Energiefluss-Karte für [Home Assistant](https://www.home-assistant.io
 - **Direkte Flüsse aus deinen Sensoren**, z. B. „Solar zum Speicher“. Die Karte rechnet nichts aus Schwellwerten zusammen.
 - **Ladestand im Knoten** (Zahl plus Ring bzw. Rahmen). Der Richtungstext („lädt“, „Bezug“ …) lässt sich ein- und ausschalten.
 - **Quellen-Aufteilung:** Ein Knoten kann zeigen, woher seine Leistung kommt, z. B. Solar- und Netzanteil an der Wallbox (`show_sources`).
+- **Navigation:** Knoten antippen öffnet ein anderes Dashboard oder eine Seite; dazu ein optionaler Fußnoten-Link (z. B. zum Energie-Dashboard).
 - **Eigenes Hintergrundbild**, optional mit automatischem Wechsel nach Tageszeit und Wetter (klar, bewölkt, Regen, starker Regen – jeweils Tag und Nacht) und weichem Überblenden.
 - **Visueller Editor** im Karten-Dialog. YAML ist nicht nötig.
 - Beliebig viele eigene Knoten (Wärmepumpe, Pool, zweite Wallbox …).
@@ -104,6 +105,9 @@ Die Knoten `solar`, `home`, `battery`, `grid` und `ev` bringen Symbol, Name, Far
 | `show_state_text` | `false` | Richtungstext unter dem Namen („lädt“, „entlädt“, „Bezug“, „Einspeisung“) |
 | `show_sources` | `false` | Quellen-Aufteilung unter jedem Knoten mit eingehenden Flüssen (siehe unten). Auch pro Knoten einstellbar |
 | `sources_mode` | `always` | `always` zeigt alle Quellen, `active` nur, wenn mindestens zwei Quellen Leistung liefern (siehe unten). Auch pro Knoten einstellbar |
+| `footer_path` | – | Fußnoten-Link unten rechts: Dashboard-Pfad (`/energy`) oder vollständige URL (siehe Navigation) |
+| `footer_label` | *Energie-Dashboard* | Text des Fußnoten-Links |
+| `footer_icon` | `mdi:arrow-right-circle-outline` | Symbol des Fußnoten-Links |
 | `animation` | `true` | Wandernde Punkte an/aus. Bei „Bewegung reduzieren“ im Betriebssystem bleiben sie aus |
 | `line_gradient` | `true` | Farbverlauf auf den Linien. `false` = einfarbig in der Farbe des Startknotens |
 | `gradient_hold` | `15` | Einfarbiger Anteil an jedem Ende der Linie in % (0 bis 45) |
@@ -126,6 +130,7 @@ Die Knoten `solar`, `home`, `battery`, `grid` und `ev` bringen Symbol, Name, Far
 | `show_state_text` | `true`/`false` überschreibt die globale Einstellung für diesen Knoten |
 | `show_sources` | `true`/`false` überschreibt die globale Einstellung für diesen Knoten |
 | `sources_mode` | `always` oder `active`. Überschreibt die globale Einstellung für diesen Knoten |
+| `navigate_path` | Antippen des Knotens öffnet diesen Dashboard-Pfad (`/energy`, `/lovelace/solar`) oder diese URL (neuer Tab) |
 
 ### Flüsse (`flows:`)
 
@@ -159,6 +164,24 @@ nodes:
 ```
 
 Beim Darüberfahren erscheint der Name der Quelle. Zwei Quellen passen gut in einen Knoten in Standardgröße. Bei drei oder mehr Quellen (oder kleinen Karten) vergrößere die `size` des Knotens und schalte die Funktion lieber pro Knoten als global ein.
+
+## Navigation
+
+Jeder Knoten kann auf ein anderes Dashboard oder eine andere Seite führen. Zusätzlich gibt es einen optionalen Fußnoten-Link unten rechts in der Karte:
+
+```yaml
+footer_path: /energy              # Fußnoten-Link
+footer_label: Energie-Dashboard   # optional, Standard je nach Sprache
+nodes:
+  home:
+    navigate_path: /energy        # Haus-Knoten antippen
+  solar:
+    navigate_path: /lovelace/solar
+  ev:
+    navigate_path: https://example.org   # vollständige URL öffnet einen neuen Tab
+```
+
+Der Pfad ist der Teil der Adresszeile nach dem Hostnamen. Knoten mit Ziel zeigen den Zeiger-Cursor und lassen sich per Tastatur bedienen. Im Layout-Modus sind die Links abgeschaltet, damit sich die Knoten verschieben lassen.
 
 ## Knoten verschieben (Layout-Modus)
 
